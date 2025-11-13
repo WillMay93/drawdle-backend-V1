@@ -12,8 +12,11 @@ from functools import lru_cache
 app = Flask(__name__)
 CORS(app)
 
-OPENAI_API_KEY = "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"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError("Missing OPENAI_API_KEY environment variable")
 client = OpenAI(api_key=OPENAI_API_KEY)
+
 
 CACHE_FILE = "daily_target.json"
 LEADERBOARD_FILE = "leaderboard.json"
