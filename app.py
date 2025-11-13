@@ -10,7 +10,10 @@ from functools import lru_cache
 
 # -------------------- SETUP -------------------- #
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=[
+    "http://localhost:3000",            # local dev
+    "https://drawdle-frontend.vercel.app",  # deployed frontend
+])
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
