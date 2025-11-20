@@ -25,6 +25,11 @@ def add_headers(response):
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     return response
 
+# OpenAI API key from environment (same pattern as OLD)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError("Missing OPENAI_API_KEY environment variable")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 CACHE_FILE = "daily_target.json"
