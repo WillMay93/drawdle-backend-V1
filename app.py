@@ -187,7 +187,7 @@ def generate_hint(guess: str, target: str, category: str, expected_colour: str, 
     elif attempt == 2:
         # Add colour clue
         colour_text = expected_colour or "a specific colour"
-        return f"Hint: The target is usually {colour_text}."
+        return f"Hint: The target is usually {colour_text} and in the {category} category."
     elif attempt == 3:
         # Bring in location
         location = location or "its usual place"
@@ -394,13 +394,6 @@ def submit():
 
         # Expanded category match logic with synonyms
         category_synonyms = {
-            "nature item": ["plant", "flower", "tree", "nature", "vegetation"],
-            "plant": ["nature item", "vegetation", "flower", "tree"],
-            "fruit": ["food", "produce"],
-            "food": ["fruit", "vegetable", "produce", "snack"],
-            "vehicle": ["transport", "car", "transportation"],
-            "animal": ["creature", "pet", "wildlife"],
-            "tool": ["utensil", "instrument", "equipment"],
         }
 
         # Category match logic
