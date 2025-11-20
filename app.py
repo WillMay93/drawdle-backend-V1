@@ -126,7 +126,7 @@ def get_ai_daily_target():
         "- If it's a tool: where it is commonly found (e.g., 'garage workshop'). "
 
         "Respond ONLY with valid JSON in this exact format: "
-        '{"prompt":"YOUR_OBJECT","public_name":"A category hint","category":"category_name","colour":"colour_name","location":"exact_location"}'
+        '{"prompt":"YOUR_OBJECT","public_name":"A category hint","category":"category_name","colour":"colour_name","location":"exact_location","use_for":"what_the_object_is_used_for"}'
     )
 
     response = client.chat.completions.create(
@@ -228,7 +228,8 @@ def get_target():
         "public_name": target["public_name"],
         "colour": target["colour"],
         "category": target["category"],
-        "location": target.get("location", "unknown")
+        "location": target.get("location", "unknown"),
+         "use_for": target.get("use_for", "unknown")
     })
 
 
