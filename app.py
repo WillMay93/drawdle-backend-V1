@@ -25,11 +25,6 @@ def add_headers(response):
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     return response
 
-# OpenAI API key from environment (same pattern as OLD)
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError("Missing OPENAI_API_KEY environment variable")
-
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 CACHE_FILE = "daily_target.json"
@@ -100,17 +95,14 @@ def save_leaderboard(entries):
 
 
 def get_ai_daily_target():
-    """
-    Ask OpenAI for a simple drawable target once per day.
-    Uses a deterministic seed based on today's date to avoid repeats.
-    """
+    """Ask OpenAI for a simple drawable target once per day."""
     today = date.today().isoformat()
 
     cached = load_cache()
     if cached and cached.get("date") == today:
         return cached
 
-    # deterministic seed for variety
+    import hashlib
     date_hash = int(hashlib.md5(today.encode()).hexdigest(), 16)
     seed_number = date_hash % 1000
 
@@ -151,6 +143,7 @@ def get_ai_daily_target():
     else:
         try:
             data = json.loads(m.group(0))
+            # Ensure location exists
             if "location" not in data:
                 data["location"] = "unknown"
         except Exception:
@@ -178,19 +171,33 @@ def parse_json_from_text(text):
         return None
 
 
-def generate_hint(guess: str, target: str, category: str, expected_colour: str, attempt: int):
-    """Generate a contextual hint based on the player's guess and progress."""
+def generate_hint(guess: str, target: str, category: str, expected_colour: str, location: str, attempt: int):
+    """
+    Generate a contextual hint based on the player's guess, progress,
+    AND the target location.
+    """
     if attempt == 1:
-        return f"Try drawing something in the {category} category!"
+        # Very gentle nudge
+        return f"Try drawing something in the {category} category."
     elif attempt == 2:
-        return f"Hint: The target colour is {expected_colour}."
+        # Add colour clue
+        colour_text = expected_colour or "a specific colour"
+        return f"Hint: The target is usually {colour_text}."
     elif attempt == 3:
-        if guess.lower() != target.lower():
-            return f"You drew '{guess}', but we're looking for something else in the {category} category."
-        else:
-            return "You're very close! Check the colour and shape details."
+        # Bring in location
+        location = location or "its usual place"
+        return (
+            f"You're getting closer. Think about something in the {category} category "
+            f"that you'd often find {location}."
+        )
     else:
-        return f"Almost there! Remember: {category}, {expected_colour} colour. Focus on key features!"
+        # Strong hint: category + colour + location
+        colour_text = expected_colour or "a distinctive colour"
+        location = location or "its usual place"
+        return (
+            f"Almost there! It's a {category}, usually {colour_text}, "
+            f"and you'd typically find it {location}."
+        )
 
 
 def normalize_category(cat: str) -> str:
@@ -253,7 +260,6 @@ def post_leaderboard():
         return jsonify({"success": True, "leaderboard": entries})
     except Exception as e:
         print("Error saving leaderboard:", e)
-        traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -263,20 +269,9 @@ def submit():
         return "", 200
 
     try:
-        # Safer JSON parsing with debug (from OLD)
-        try:
-            data = request.get_json(force=True)
-            if not data:
-                raise ValueError("No JSON body received")
-        except Exception as e:
-            print("❌ Failed to parse JSON:", e)
-            return jsonify({"success": False, "message": "Invalid JSON"}), 400
-
-        print("🧩 Received data from frontend:", data)
-        print("🧩 Keys:", list(data.keys()))
-
+        data = request.get_json(force=True)
         image_base64 = data.get("image_base64")
-        attempt = int(data.get("attempt", 1))
+        attempt = int(data.get("attempt", 1) or 1)
         input_colour_raw = str(data.get("colour", ""))
 
         target_info = get_ai_daily_target()
@@ -295,21 +290,29 @@ def submit():
         # Image payload
         img_data = image_base64.split(",", 1)[1] if "," in image_base64 else image_base64
 
-        # Step 1: Get AI's independent guess
+        # -------------------- STEP 1: AI independent analysis -------------------- #
         guess_instruction = (
-            "You are analyzing a drawing. Look at this image and tell me:\n"
-            "1. What object is drawn in this image? (be specific)\n"
-            "2. What category does it belong to? (e.g., fruit, animal, vehicle, plant, tool, food, nature item, etc.)\n"
-            "3. What is the primary color used in the drawing?\n"
-            "4. How neat and clear is the drawing? (0-25 points for style/neatness)\n\n"
+            "You are analyzing a player's drawing from a browser paint app for a guessing game.\n"
+            "Look at the image and provide:\n"
+            "1. 'guess' – what single main object is drawn (be specific, 1–3 words).\n"
+            "2. 'category' – high-level category (fruit, animal, vehicle, plant, tool, food, nature item, etc.).\n"
+            "3. 'primary_color' – main colour of the object.\n"
+            "4. 'style_score' – 0–25, based on neatness, clarity, line confidence, and overall polish.\n"
+            "5. 'background_score' – 0–20, where 0 means no background (just object on blank space), "
+            "and 20 means a rich background or scene (sky, ground, room, scenery, multiple environment elements).\n"
+            "6. 'creativity_score' – 0–30, based on extra details, composition, expression, shading, fun ideas, "
+            "and overall creativity.\n\n"
             "Return ONLY valid JSON with these exact fields:\n"
-            '{"guess": "what_object_is_drawn", '
-            '"category": "category_name", '
-            '"primary_color": "color_name", '
-            '"style_score": 0-25}'
+            '{'
+            '"guess":"what_object_is_drawn",'
+            '"category":"category_name",'
+            '"primary_color":"color_name",'
+            '"style_score":0-25,'
+            '"background_score":0-20,'
+            '"creativity_score":0-30'
+            '}'
         )
 
-        # Get independent guess from AI
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -328,17 +331,25 @@ def submit():
         guess = parsed.get("guess", "").strip().lower()
         ai_category = parsed.get("category", "").strip().lower()
         ai_detected_color = parsed.get("primary_color", "").strip().lower()
-        style_score = max(0, min(25, int(parsed.get("style_score", 0))))
 
-        # Step 2: Compare against target
-        # Check if guess matches target (exact or very close)
+        # Raw component scores from AI (clamped)
+        style_score_raw = int(parsed.get("style_score", 0) or 0)
+        background_score_raw = int(parsed.get("background_score", 0) or 0)
+        creativity_score_raw = int(parsed.get("creativity_score", 0) or 0)
+
+        style_score_raw = max(0, min(style_score_raw, 25))
+        background_score_raw = max(0, min(background_score_raw, 20))
+        creativity_score_raw = max(0, min(creativity_score_raw, 30))
+
+        # -------------------- STEP 2: Compare against target -------------------- #
+
+        # Check if guess matches target (exact match or close variant)
         correct = guess == target_prompt
 
         if not correct:
             guess_normalized = guess.replace(" ", "").replace("-", "")
             target_normalized = target_prompt.replace(" ", "").replace("-", "")
 
-            # Allow singular/plural variations
             if guess_normalized.endswith("s"):
                 guess_normalized = guess_normalized[:-1]
             if target_normalized.endswith("s"):
@@ -346,14 +357,13 @@ def submit():
 
             correct = guess_normalized == target_normalized
 
-        # Step 3: Evaluate shape match if we need more detail
+        # Shape match evaluation (extra strictness but not instant fail)
         shape_match = False
         if correct:
             shape_instruction = (
                 f"Look at this drawing. The person was trying to draw a '{target_prompt}'. "
                 f"Does the shape and form clearly represent a {target_prompt}? "
-                f"Return ONLY valid JSON: "
-                f'{{"shape_match": true/false}}'
+                f"Return ONLY valid JSON: {{\"shape_match\": true/false}}"
             )
 
             shape_response = client.chat.completions.create(
@@ -370,10 +380,10 @@ def submit():
             shape_parsed = parse_json_from_text(shape_response.choices[0].message.content) or {}
             shape_match = bool(shape_parsed.get("shape_match", False))
 
-        # Color match evaluation (from AI)
+        # Color match evaluation
         ai_color_match = canonical_colour(ai_detected_color) == expected_colour
 
-        # Normalize categories
+        # Normalize categories for comparison
         normalized_ai_category = normalize_category(ai_category)
         normalized_expected_category = normalize_category(expected_category)
 
@@ -388,14 +398,13 @@ def submit():
             "tool": ["utensil", "instrument", "equipment"],
         }
 
-        # Direct or containment match
+        # Category match logic
         category_match = (
             normalized_ai_category == normalized_expected_category or
             (normalized_ai_category and normalized_ai_category in normalized_expected_category) or
             (normalized_expected_category and normalized_expected_category in normalized_ai_category)
         )
 
-        # Check synonyms if direct match fails
         if not category_match:
             expected_synonyms = category_synonyms.get(normalized_expected_category, [])
             ai_synonyms = category_synonyms.get(normalized_ai_category, [])
@@ -405,30 +414,67 @@ def submit():
                 normalized_expected_category in ai_synonyms
             )
 
-        # Color match - if player used the expected color, override AI judgement
+        # Color match - if player used the expected colour, override AI
         color_match = ai_color_match
         if input_colour and expected_colour and input_colour == expected_colour:
             color_match = True
 
-        # Generate contextual hint & location hint
-        hint = generate_hint(guess, target_prompt, expected_category, expected_colour, attempt)
-        hint_location = target_location
+        # -------------------- STEP 3: Scoring (stricter, with style/background/creativity) -------------------- #
 
-        # Success determination
-        success = correct and category_match
+        # SUCCESS is about the game outcome (for your UI):
+        success = bool(correct and category_match)
 
-        # Calculate score
+        # Weighting:
+        # - Object correctness: up to 40
+        # - Shape: up to 15
+        # - Colour: up to 10
+        # - Style: up to 30 (strong weight)
+        # - Background: up to 10
+        # - Creativity: up to 15
+        # Then attempt penalty (10 per extra attempt), all clamped to 0–100.
+
+        # Scale the AI raw scores into point values
+        style_points = min(30, int(round(style_score_raw * 1.2)))              # 0–30
+        background_points = int(round(background_score_raw * 0.5))            # 0–10
+        creativity_points = int(round(creativity_score_raw * 0.5))            # 0–15
+
+        # Core correctness-dependent components
+        object_points = 40 if success else 0
+        shape_points = 15 if (success and shape_match) else 0
+        colour_points = 10 if (success and color_match) else 0
+
+        # Stricter but not brutal:
+        # - If success: full scoring with attempt penalty
+        # - If failure: you can still get some style/background/creativity points, but capped lower
+        attempt = max(1, attempt)
+        attempt_penalty = (attempt - 1) * 10
+
         if success:
-            base_score = 50
-            if color_match:
-                base_score += 20
-            if shape_match:
-                base_score += 20
-            base_score += style_score  # 0-25 points
-            attempt_penalty = (attempt - 1) * 10
-            final_score = max(0, min(100, base_score - attempt_penalty))
+            raw_score = (
+                object_points +
+                shape_points +
+                colour_points +
+                style_points +
+                background_points +
+                creativity_points
+            )
+            final_score = max(0, min(100, raw_score - attempt_penalty))
         else:
-            final_score = 0
+            # Wrong object -> only “style” side can score, and not too high
+            raw_style_side = style_points + background_points + creativity_points
+            final_score = max(0, min(60, int(round(raw_style_side * 0.6))))
+
+        # -------------------- STEP 4: Hint & debug -------------------- #
+
+        hint = generate_hint(
+            guess=guess,
+            target=target_prompt,
+            category=expected_category,
+            expected_colour=expected_colour,
+            location=target_location,
+            attempt=attempt
+        )
+        hint_location = target_location if attempt >= 3 else ""
 
         print(f"\n=== DEBUG ===")
         print(f"Target: {target_prompt}")
@@ -442,8 +488,24 @@ def submit():
         print(f"Input colour (brush): {input_colour}")
         print(f"Color match: {color_match}")
         print(f"Shape match: {shape_match}")
-        print(f"Success: {success}")
+        print(f"Style score raw: {style_score_raw} -> {style_points}")
+        print(f"Background score raw: {background_score_raw} -> {background_points}")
+        print(f"Creativity score raw: {creativity_score_raw} -> {creativity_points}")
+        print(f"Attempt: {attempt}, penalty: {attempt_penalty}")
+        print(f"Success: {success}, Final score: {final_score}")
         print(f"=============\n")
+
+        # -------------------- STEP 5: Progress-bar friendly breakdown -------------------- #
+
+        breakdown = {
+            "object": {"score": object_points, "max": 40},
+            "shape": {"score": shape_points, "max": 15},
+            "colour": {"score": colour_points, "max": 10},
+            "style": {"score": style_points, "max": 30},
+            "background": {"score": background_points, "max": 10},
+            "creativity": {"score": creativity_points, "max": 15},
+            "attempt_penalty": {"score": attempt_penalty, "max": 30},  # treat as deduction on UI
+        }
 
         return jsonify({
             "success": success,
@@ -453,19 +515,21 @@ def submit():
             "category_match": category_match,
             "color_match": color_match,
             "shape_match": shape_match,
-            "style_score": style_score,
+            "style_score": style_score_raw,
+            "background_score": background_score_raw,
+            "creativity_score": creativity_score_raw,
             "expected_category": expected_category,
             "expected_colour": expected_colour,
             "target_id": target_prompt,
             "hint": hint,
-            "hint_location": hint_location
+            "hint_location": hint_location,
+            "breakdown": breakdown
         })
 
     except Exception as e:
         print("Error in /submit:", e)
+        import traceback
         traceback.print_exc()
-        print("🎨 Received colour from front end:", data.get("colour") if 'data' in locals() else "N/A")
-        print("🎯 Expected colour from target:", target_info.get("colour") if 'target_info' in locals() else "N/A")
         return jsonify({"success": False, "message": str(e)}), 500
 
 
