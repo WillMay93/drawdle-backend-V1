@@ -187,15 +187,14 @@ def generate_hint(guess: str, target: str, category: str, expected_colour: str, 
     elif attempt == 2:
         # Add colour clue
         colour_text = expected_colour or "a specific colour"
-        return f"Hint: The target is usually {colour_text} and in the {category} category."
+        return f"The target is usually {colour_text}."
     elif attempt == 3:
         # Bring in location
         location = location or "its usual place"
         return (
-            f"You're getting closer. Think about something in the {category} category "
-            f"that you'd often find {location}."
+            f" It can be found {location}."
         )
-    else:
+    elif attempt == 4:
         # Strong hint: category + colour + location
         colour_text = expected_colour or "a distinctive colour"
         location = location or "its usual place"
