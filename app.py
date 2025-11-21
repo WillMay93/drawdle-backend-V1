@@ -187,7 +187,7 @@ def generate_hint(guess: str, target: str, category: str, expected_colour: str, 
     elif attempt == 2:
         # Add colour clue
         colour_text = expected_colour or "a specific colour"
-        return f"The target is usually {colour_text}."
+        return f"Something is usually {colour_text}."
     elif attempt == 3:
         # Bring in location
         location = location or "its usual place"
