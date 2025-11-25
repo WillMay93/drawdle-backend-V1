@@ -126,6 +126,9 @@ def get_ai_daily_target():
         "Pick ONE simple, easily drawable object that is common and recognizable. "
         
         "Choose from these DIVERSE categories (pick a different one each day): "
+        "- Musical instruments (guitar, piano, drum, trumpet, violin, etc.)\n"
+        "- Clothing (hat, shoe, shirt, dress, glove, etc.)\n"
+        "- Sea creatures (fish, octopus, crab, dolphin, whale, etc.)\n"
         "- Fruits (apple, banana, orange, strawberry, watermelon, pear, etc.)\n"
         "- Vegetables (carrot, broccoli, tomato, corn, pepper, etc.)\n"
         "- Animals (cat, dog, bird, fish, elephant, butterfly, etc.)\n"
@@ -136,9 +139,6 @@ def get_ai_daily_target():
         "- Tools (hammer, wrench, saw, screwdriver, paintbrush, etc.)\n"
         "- Sports equipment (ball, tennis racket, skateboard, hockey stick, etc.)\n"
         "- Food items (pizza, cake, sandwich, ice cream, burger, etc.)\n"
-        "- Musical instruments (guitar, piano, drum, trumpet, violin, etc.)\n"
-        "- Clothing (hat, shoe, shirt, dress, glove, etc.)\n"
-        "- Sea creatures (fish, octopus, crab, dolphin, whale, etc.)\n"
         "- Weather elements (rainbow, lightning, snowflake, raindrop, etc.)\n"
         
         "Pick one main colour from: red, yellow, blue, green, orange, black. "
