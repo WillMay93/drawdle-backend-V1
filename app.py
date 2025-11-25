@@ -389,7 +389,7 @@ def submit():
         )
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini-vision",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": guess_instruction},
                 {"role": "user", "content": [
