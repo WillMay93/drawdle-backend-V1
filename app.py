@@ -603,10 +603,10 @@ def submit():
 
 # -------------------- MAIN -------------------- #
 if __name__ == "__main__":
-    # CLEAR CACHE ON EVERY DEPLOY
-if os.path.exists(CACHE_FILE):
-    os.remove(CACHE_FILE)
-    
-    # Deployment-friendly: use PORT from env, host 0.0.0.0, debug off by default
-    port = int(os.environ.get("PORT", 5000))
+    # Clear today's target so we always generate a fresh one on startup
+    if os.path.exists(CACHE_FILE):
+        os.remove(CACHE_FILE)
+
+    port = int(os.environ.get("PORT", 5050))
     app.run(host="0.0.0.0", port=port, debug=False)
+
