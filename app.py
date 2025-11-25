@@ -602,10 +602,11 @@ def submit():
 
 
 # -------------------- MAIN -------------------- #
-# CLEAR CACHE ON EVERY DEPLOY
+if __name__ == "__main__":
+    # CLEAR CACHE ON EVERY DEPLOY
 if os.path.exists(CACHE_FILE):
     os.remove(CACHE_FILE)
-if __name__ == "__main__":
+    
     # Deployment-friendly: use PORT from env, host 0.0.0.0, debug off by default
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
