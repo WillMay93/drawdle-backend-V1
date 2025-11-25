@@ -274,17 +274,6 @@ def generate_hint(guess: str, target: str, category: str, expected_colour: str, 
         )
 
 
-def normalize_category(cat: str) -> str:
-    """Normalize category for comparison."""
-    if not cat:
-        return ""
-    cat = cat.strip().lower()
-    # Remove common plural 's'
-    if cat.endswith("s") and len(cat) > 1:
-        cat = cat[:-1]
-    return cat
-
-
 # -------------------- ROUTES -------------------- #
 
 @app.route("/target", methods=["GET"])
