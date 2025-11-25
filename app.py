@@ -246,26 +246,31 @@ def generate_hint(guess: str, target: str, category: str, expected_colour: str, 
     Generate a contextual hint based on the player's guess, progress,
     AND the target location.
     """
+    # Capitalize category for better readability
+    category_display = category.title() if category else "this category"
+    colour_text = expected_colour or "a specific colour"
+    location_text = location or "its usual place"
+    
     if attempt == 1:
         # Very gentle nudge
-        return f"Try drawing something in the {category} category."
+        return f"Try drawing something in the {category_display} category."
     elif attempt == 2:
         # Add colour clue
-        colour_text = expected_colour or "a specific colour"
-        return f"Something is usually {colour_text}."
+        return f"Hint: This object is usually {colour_text}."
     elif attempt == 3:
         # Bring in location
-        location = location or "its usual place"
-        return (
-            f" It can be found {location}."
-        )
+        return f"Hint: It's typically {location_text}"
     elif attempt == 4:
         # Strong hint: category + colour + location
-        colour_text = expected_colour or "a distinctive colour"
-        location = location or "its usual place"
         return (
-            f"Almost there! It's a {category}, usually {colour_text}, "
-            f"and you'd typically find it {location}."
+            f"Almost there! It's in the {category_display} category, "
+            f"usually {colour_text}, and you'd typically find it {location_text}"
+        )
+    else:
+        # Attempt 5 - very strong hint
+        return (
+            f"Last chance! Think of a {colour_text} {category_display.lower()} "
+            f"that is {location_text}"
         )
 
 
