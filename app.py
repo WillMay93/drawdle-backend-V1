@@ -364,57 +364,91 @@ def submit():
         # Image payload
         img_data = image_base64.split(",", 1)[1] if "," in image_base64 else image_base64
 
-        # -------------------- STEP 1: AI independent analysis -------------------- #
-        guess_instruction = (
-            "You are analyzing a player's drawing from a browser paint app for a guessing game.\n"
-            "Look at the image and provide:\n"
-            "1. 'guess' – what single main object is drawn (be specific, 1–3 words).\n"
-            "2. 'category' – high-level category (fruit, animal, vehicle, plant, tool, food, nature item, etc.).\n"
-            "3. 'primary_color' – main colour of the object.\n"
-            "4. 'style_score' – 0–25, based on neatness, clarity, line confidence, and overall polish.\n"
-            "5. 'background_score' – 0–20, where 0 means no background (just object on blank space), "
-            "and 20 means a rich background or scene (sky, ground, room, scenery, multiple environment elements).\n"
-            "6. 'creativity_score' – 0–30, based on extra details, composition, expression, shading, fun ideas, "
-            "and overall creativity.\n\n"
-            "Return ONLY valid JSON with these exact fields:\n"
-            '{'
-            '"guess":"what_object_is_drawn",'
-            '"category":"category_name",'
-            '"primary_color":"color_name",'
-            '"style_score":0-25,'
-            '"background_score":0-20,'
-            '"creativity_score":0-30'
-            '}'
-        )
+    # Replace the STEP 1 section in your submit() function with this:
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": guess_instruction},
-                {"role": "user", "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_data}"}}
-                ]}
-            ],
-            temperature=0.3
-        )
+# -------------------- STEP 1: AI independent analysis -------------------- #
 
-        output_text = response.choices[0].message.content
-        parsed = parse_json_from_text(output_text) or {}
+# Give AI context about what category to expect (without revealing the exact answer)
+context_hint = f"The player is trying to draw something in the '{expected_category}' category."
 
-        # Extract AI's independent evaluation
-        guess = parsed.get("guess", "").strip().lower()
-        ai_category = parsed.get("category", "").strip().lower()
-        ai_detected_color = parsed.get("primary_color", "").strip().lower()
+guess_instruction = (
+    "You are analyzing a player's drawing from a browser paint app for a guessing game.\n"
+    f"{context_hint}\n\n"
+    "CRITICAL INSTRUCTIONS:\n"
+    "- Look carefully at the ACTUAL SHAPES and forms in the drawing\n"
+    "- Do NOT default to common objects like 'cat', 'dog', or 'house' unless clearly depicted\n"
+    "- If the drawing is abstract or unclear, describe what you ACTUALLY see\n"
+    "- Consider the category context when making your guess\n"
+    "- Be specific about what shapes, features, and details you observe\n\n"
+    
+    "Provide:\n"
+    "1. 'guess' – what single main object is drawn (be specific, 1–3 words). "
+    "If unclear, describe the actual shapes you see (e.g., 'circular shape', 'curved lines').\n"
+    "2. 'confidence' – how confident you are in your guess (0-100, where 100 is certain).\n"
+    "3. 'category' – high-level category (fruit, animal, vehicle, plant, tool, food, nature item, building, clothing, etc.).\n"
+    "4. 'primary_color' – main colour of the object.\n"
+    "5. 'recognizable_features' – list specific features you can identify (e.g., 'round body', 'pointed ears', 'wheels').\n"
+    "6. 'style_score' – 0–25, based on neatness, clarity, line confidence, and overall polish.\n"
+    "7. 'background_score' – 0–20, where 0 means no background (just object on blank space), "
+    "and 20 means a rich background or scene (sky, ground, room, scenery, multiple environment elements).\n"
+    "8. 'creativity_score' – 0–30, based on extra details, composition, expression, shading, fun ideas, "
+    "and overall creativity.\n\n"
+    
+    "Return ONLY valid JSON with these exact fields:\n"
+    '{'
+    '"guess":"what_object_is_drawn",'
+    '"confidence":0-100,'
+    '"category":"category_name",'
+    '"primary_color":"color_name",'
+    '"recognizable_features":["feature1","feature2"],'
+    '"style_score":0-25,'
+    '"background_score":0-20,'
+    '"creativity_score":0-30'
+    '}'
+)
 
-        # Raw component scores from AI (clamped)
-        style_score_raw = int(parsed.get("style_score", 0) or 0)
-        background_score_raw = int(parsed.get("background_score", 0) or 0)
-        creativity_score_raw = int(parsed.get("creativity_score", 0) or 0)
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {"role": "system", "content": guess_instruction},
+        {"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_data}"}}
+        ]}
+    ],
+    temperature=0.1
+)
 
-        style_score_raw = max(0, min(style_score_raw, 25))
-        background_score_raw = max(0, min(background_score_raw, 20))
-        creativity_score_raw = max(0, min(creativity_score_raw, 30))
+output_text = response.choices[0].message.content
+parsed = parse_json_from_text(output_text) or {}
 
+# Extract AI's independent evaluation
+guess = parsed.get("guess", "").strip().lower()
+confidence = int(parsed.get("confidence", 0) or 0)
+ai_category = parsed.get("category", "").strip().lower()
+ai_detected_color = parsed.get("primary_color", "").strip().lower()
+recognizable_features = parsed.get("recognizable_features", [])
+
+# NEW: If confidence is too low and guess doesn't match category, penalize heavily
+category_mismatch_penalty = False
+if confidence < 60:
+    if normalize_category(ai_category) != normalize_category(expected_category):
+        category_mismatch_penalty = True
+        print(f"WARNING: Low confidence ({confidence}) + category mismatch")
+
+# Raw component scores from AI (clamped)
+style_score_raw = int(parsed.get("style_score", 0) or 0)
+background_score_raw = int(parsed.get("background_score", 0) or 0)
+creativity_score_raw = int(parsed.get("creativity_score", 0) or 0)
+
+style_score_raw = max(0, min(style_score_raw, 25))
+background_score_raw = max(0, min(background_score_raw, 20))
+creativity_score_raw = max(0, min(creativity_score_raw, 30))
+
+# Apply penalty if drawing is too ambiguous
+if category_mismatch_penalty:
+    style_score_raw = int(style_score_raw * 0.5)  # Reduce style score
+    creativity_score_raw = int(creativity_score_raw * 0.5)  # Reduce creativity
+    
         # -------------------- STEP 2: Compare against target -------------------- #
 
         # Check if guess matches target (exact match or close variant)
