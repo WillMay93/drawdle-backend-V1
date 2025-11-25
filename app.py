@@ -98,32 +98,58 @@ def save_leaderboard(entries):
     with open(LEADERBOARD_FILE, "w") as f:
         json.dump(entries, f, indent=2)
 
-
 def get_ai_daily_target():
-    """Ask OpenAI for a simple drawable target once per day."""
+    """Ask OpenAI for a simple drawable target once per day with category variety."""
     today = date.today().isoformat()
 
     cached = load_cache()
     if cached and cached.get("date") == today:
         return cached
 
+    # Load previous target to avoid category repetition
+    previous_category = None
+    if cached:
+        previous_category = cached.get("category", "").strip().lower()
+
     import hashlib
     date_hash = int(hashlib.md5(today.encode()).hexdigest(), 16)
     seed_number = date_hash % 1000
 
+    # Build category exclusion text
+    avoid_text = ""
+    if previous_category:
+        avoid_text = f"IMPORTANT: Yesterday's category was '{previous_category}'. You MUST choose a DIFFERENT category today. "
+
     prompt = (
         f"You are creating a daily challenge for a drawing game. Today's seed number is {seed_number}. "
+        f"{avoid_text}"
         "Pick ONE simple, easily drawable object that is common and recognizable. "
-        "Choose from diverse categories like: fruits, vegetables, animals, vehicles, buildings, "
-        "nature items, household objects, tools, sports equipment, or food items. "
-        "Avoid repeating overly common choices like 'apple'. "
+        
+        "Choose from these DIVERSE categories (pick a different one each day): "
+        "- Fruits (apple, banana, orange, strawberry, watermelon, pear, etc.)\n"
+        "- Vegetables (carrot, broccoli, tomato, corn, pepper, etc.)\n"
+        "- Animals (cat, dog, bird, fish, elephant, butterfly, etc.)\n"
+        "- Vehicles (car, bicycle, boat, airplane, train, etc.)\n"
+        "- Buildings (house, castle, lighthouse, barn, skyscraper, etc.)\n"
+        "- Nature items (tree, flower, sun, cloud, mountain, star, etc.)\n"
+        "- Household objects (chair, lamp, cup, door, window, bed, etc.)\n"
+        "- Tools (hammer, wrench, saw, screwdriver, paintbrush, etc.)\n"
+        "- Sports equipment (ball, tennis racket, skateboard, hockey stick, etc.)\n"
+        "- Food items (pizza, cake, sandwich, ice cream, burger, etc.)\n"
+        "- Musical instruments (guitar, piano, drum, trumpet, violin, etc.)\n"
+        "- Clothing (hat, shoe, shirt, dress, glove, etc.)\n"
+        "- Sea creatures (fish, octopus, crab, dolphin, whale, etc.)\n"
+        "- Weather elements (rainbow, lightning, snowflake, raindrop, etc.)\n"
+        
         "Pick one main colour from: red, yellow, blue, green, orange, black. "
 
         "For the 'location' field, provide a highly specific, realistic place relevant to the object: "
-        "- If it's a fruit/vegetable: where it's grown (e.g., 'grown in Spain', 'native to Thailand'). "
-        "- If it's a household item: where it is stored (e.g., 'kept under the kitchen sink'). "
-        "- If it's an animal: its natural habitat or home region. "
-        "- If it's a tool: where it is commonly found (e.g., 'garage workshop'). "
+        "- If it's a fruit/vegetable: where it's grown (e.g., 'grown in orchards in Washington state'). "
+        "- If it's a household item: where it is stored (e.g., 'kept in the bathroom cabinet'). "
+        "- If it's an animal: its natural habitat (e.g., 'found in African savannas'). "
+        "- If it's a tool: where it is commonly found (e.g., 'stored in garage toolboxes'). "
+        "- If it's a vehicle: where it operates (e.g., 'seen on highways', 'found at marinas'). "
+        "- If it's food: where it's commonly served (e.g., 'served at pizzerias', 'sold at bakeries'). "
 
         "Respond ONLY with valid JSON in this exact format: "
         '{"prompt":"YOUR_OBJECT","public_name":"A category hint","category":"category_name","colour":"colour_name","location":"exact_location","use_for":"what_the_object_is_used_for"}'
@@ -132,37 +158,76 @@ def get_ai_daily_target():
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
-        temperature=1.2
+        temperature=1.3  # Slightly higher temperature for more variety
     )
 
     text = response.choices[0].message.content
     m = re.search(r"\{[\s\S]*\}", text)
     if not m:
-        data = {
-            "prompt": "apple",
-            "public_name": "A fruit",
-            "category": "fruit",
-            "colour": "red",
-            "location": "kitchen"
-        }
+        # Fallback with variety
+        fallbacks = [
+            {
+                "prompt": "bicycle",
+                "public_name": "A vehicle",
+                "category": "vehicle",
+                "colour": "blue",
+                "location": "parked on city streets"
+            },
+            {
+                "prompt": "guitar",
+                "public_name": "A musical instrument",
+                "category": "musical instrument",
+                "colour": "orange",
+                "location": "kept in music studios"
+            },
+            {
+                "prompt": "lighthouse",
+                "public_name": "A building",
+                "category": "building",
+                "colour": "red",
+                "location": "standing on rocky coastlines"
+            }
+        ]
+        data = fallbacks[seed_number % len(fallbacks)]
     else:
         try:
             data = json.loads(m.group(0))
             # Ensure location exists
             if "location" not in data:
                 data["location"] = "unknown"
-        except Exception:
+            
+            # Double-check we didn't repeat category
+            if previous_category and data.get("category", "").strip().lower() == previous_category:
+                print(f"WARNING: AI repeated category '{previous_category}', using fallback")
+                # Use a different fallback based on seed
+                fallbacks = [
+                    {"prompt": "hammer", "category": "tool", "colour": "black", "location": "garage workshops"},
+                    {"prompt": "dolphin", "category": "sea creature", "colour": "blue", "location": "tropical oceans"},
+                    {"prompt": "rainbow", "category": "weather element", "colour": "red", "location": "seen in the sky after rain"}
+                ]
+                fb = fallbacks[seed_number % len(fallbacks)]
+                data.update(fb)
+                if "public_name" not in data:
+                    data["public_name"] = f"A {fb['category']}"
+                    
+        except Exception as e:
+            print(f"Error parsing AI response: {e}")
             data = {
-                "prompt": "apple",
-                "public_name": "A fruit",
-                "category": "fruit",
+                "prompt": "drum",
+                "public_name": "A musical instrument",
+                "category": "musical instrument",
                 "colour": "red",
-                "location": "kitchen"
+                "location": "played in concert halls"
             }
 
     data["date"] = today
     save_cache(data)
     clear_leaderboard()
+    
+    print(f"Generated target for {today}: {data['prompt']} (category: {data['category']})")
+    if previous_category:
+        print(f"Previous category was: {previous_category}")
+    
     return data
 
 
